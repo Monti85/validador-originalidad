@@ -150,7 +150,7 @@ def analyze_document_with_gemini(text: str, key: str, model_name: str) -> dict:
 Eres un comité académico experto de alto nivel en validación de originalidad, análisis lingüístico-estilístico y verificación bibliográfica universitaria.
 Tu tarea es analizar exhaustivamente el documento académico proporcionado por un estudiante o docente.
 
-Debes responder estrictamente en formato JSON válido con la siguiente estructura (sin bloques markdown adicionales fuera del JSON):
+Debes responder strictly en formato JSON válido con la siguiente estructura (sin bloques markdown adicionales fuera del JSON):
 {
     "porcentaje_ia": 25,
     "clasificacion_ia": "Bajo" | "Moderado" | "Alto",
@@ -175,38 +175,36 @@ Debes responder estrictamente en formato JSON válido con la siguiente estructur
 --- FIN DEL TEXTO ACADÉMICO ---
 """
 
-    models_to_try = [model_name, "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
-    models_to_try = list(dict.fromkeys(models_to_try))
-    
-    last_error = None
-    for m in models_to_try:
-        try:
-            response = client.models.generate_content(
-                model=m,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    temperature=0.2,
-                    response_mime_type="application/json"
-                )
+    try:
+        response = client.models.generate_content(
+            model=model_name,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=0.2,
+                response_mime_type="application/json"
             )
-            raw_text = response.text.strip()
-            if raw_text.startswith("```json"):
-                raw_text = raw_text[7:]
-            if raw_text.startswith("```"):
-                raw_text = raw_text[3:]
-            if raw_text.endswith("```"):
-                raw_text = raw_text[:-3]
-            return json.loads(raw_text.strip())
-        except Exception as e:
-            last_error = e
-            err_str = str(e)
-            if "API_KEY_INVALID" in err_str or "INVALID_ARGUMENT" in err_str and "key" in err_str.lower():
-                raise ValueError("La API Key ingresada no es válida. Por favor verifica tu clave en el panel lateral.")
-            elif "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
-                raise ValueError("Se excedió la cuota de la API de Gemini. Espera unos momentos antes de reintentar.")
+        )
+        raw_text = response.text.strip()
+        if raw_text.startswith("```json"):
+            raw_text = raw_text[7:]
+        if raw_text.startswith("```"):
+            raw_text = raw_text[3:]
+        if raw_text.endswith("```"):
+            raw_text = raw_text[:-3]
+        return json.loads(raw_text.strip())
 
-    raise RuntimeError(f"Error al conectar con la API de Gemini: {str(last_error)}")
+    except Exception as e:
+        err_str = str(e)
+        if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
+            raise ValueError("⏳ Has alcanzado el límite de velocidad por minuto (Rate Limit) de la API gratuita de Google Gemini. Por favor espera **30 a 60 segundos** antes de presionar el botón de nuevo.")
+        elif "API_KEY_INVALID" in err_str or ("INVALID_ARGUMENT" in err_str and "key" in err_str.lower()):
+            raise ValueError("La API Key ingresada no es válida. Por favor verifica tu clave en el panel lateral.")
+        elif "404" in err_str or "NOT_FOUND" in err_str:
+            raise ValueError(f"El modelo '{model_name}' no se encuentra disponible. Por favor selecciona 'gemini-1.5-flash' o 'gemini-2.0-flash' en la barra lateral.")
+        else:
+            raise RuntimeError(f"Error al conectar con la API de Gemini: {err_str}")
+
 
 # -----------------------------------------------------------------------------
 # Interfaz de Usuario Principal
