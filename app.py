@@ -21,19 +21,15 @@ st.set_page_config(
 # Estilos CSS personalizados para la identidad visual de UTEC
 st.markdown("""
 <style>
-    /* Fondo principal blanco */
-    .stApp {
-        background-color: #F8F9FA;
-    }
-    
+    /* El encabezado principal se adapta al tema oscuro */
     .main-header {
-        background-color: #FFFFFF;
-        color: #00274C; /* Azul oscuro UTEC */
+        background: linear-gradient(135deg, #111827 0%, #1F2937 100%); /* Fondo oscuro elegante */
+        color: #FFFFFF;
         padding: 2rem;
         border-radius: 12px;
         margin-bottom: 2rem;
         border-top: 5px solid #00A4E4; /* Celeste/Cyan UTEC */
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
         display: flex;
         align-items: center;
         gap: 20px;
@@ -49,14 +45,14 @@ st.markdown("""
     }
     
     .header-text h1 {
-        color: #00274C !important;
+        color: #FFFFFF !important;
         margin-bottom: 0.5rem;
         font-weight: 800;
         font-size: 2.2rem;
     }
     
     .header-text p {
-        color: #4A5568;
+        color: #9CA3AF; /* Texto descriptivo en gris claro */
         font-size: 1.1rem;
         margin: 0;
     }
@@ -76,6 +72,11 @@ st.markdown("""
     div[data-testid="stMetricValue"] {
         color: #00A4E4 !important;
     }
+
+    /* Ocultar elementos nativos de Streamlit (Deploy, Menú, Footer) */
+    [data-testid="stHeader"] {display: none;}
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -292,17 +293,8 @@ with col_left:
         help="Extrae el texto del documento para análisis de originalidad."
     )
     
-    # Opción de texto de prueba rápido
-    use_sample_doc = st.checkbox("🧪 Usar texto de ejemplo (para prueba rápida)", value=False)
-    
     extracted_text = None
-    if use_sample_doc:
-        extracted_text = """El impacto de la inteligencia artificial en la educación superior ha generado importantes debates éticos e institucionales. Según García (2023), la adopción de modelos generativos de lenguaje en entornos universitarios requiere un marco normativo claro. Sin embargo, estudios recientes (Smith et al., 2024) sugieren que más del 65% de los estudiantes utiliza herramientas de IA para sintetizar información académica.
-
-En la Universidad Tecnológica (UTEC), la implementación de tecnologías emergentes busca potenciar el pensamiento crítico sin reemplazar la autoría genuina. Es fundamental distinguir entre la asistencia tecnológica responsable y la delegación completa del razonamiento analítico. La bibliografía consultada demuestra que los patrones sintácticos reiterativos y la falta de variabilidad estilística son marcas distintivas de los borradores sintéticos."""
-        st.info("📄 Documento de ejemplo cargado (3 párrafos académicos con citas APA).")
-        
-    elif uploaded_file:
+    if uploaded_file:
         with st.spinner("Extrayendo texto del documento..."):
             try:
                 extracted_text = extract_text_from_file(uploaded_file)
@@ -323,7 +315,7 @@ with col_right:
     if not api_key:
         st.info("👈 Por favor ingresa tu **Gemini API Key** en la barra lateral para continuar.", icon="💡")
     elif not extracted_text:
-        st.info("👈 Sube un documento **PDF, DOCX o TXT** o marca la casilla de prueba rápida.", icon="📑")
+        st.info("👈 Sube un documento **PDF, DOCX o TXT** para comenzar.", icon="📑")
     else:
         st.write(f"El texto está listo para evaluarse con el modelo **{selected_model}**.")
         btn_analyze = st.button("🚀 Iniciar Análisis de Originalidad e IA", type="primary", use_container_width=True)
