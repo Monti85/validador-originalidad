@@ -1,6 +1,7 @@
 import streamlit as st
 import pypdf
 import json
+import time
 from google import genai
 from google.genai import types
 
@@ -97,12 +98,21 @@ with st.sidebar:
         "Selecciona el modelo Gemini:",
         ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"],
         index=0,
-        help="gemini-2.5-flash es el modelo oficial estándar recomendado por Google."
+        help="gemini-2.5-flash es el modelo oficial recomendado."
+    )
+    
+    st.divider()
+    st.markdown("### 📏 Tamaño de Muestra")
+    sample_limit = st.select_slider(
+        "Caracteres a analizar:",
+        options=[5000, 8000, 12000, 15000],
+        value=8000,
+        help="Limitar el tamaño del texto evita saturar la cuota de la API de Google Gemini en archivos extensos."
     )
     
     st.divider()
     st.markdown("### ℹ️ Especificaciones")
-    st.info(f"**Modelo activo:** `{selected_model}`\n\n**SDK:** `google-genai` (Oficial)\n\n**Formatos:** PDF y TXT")
+    st.info(f"**Modelo activo:** `{selected_model}`\n\n**Muestra:** {sample_limit:,} caracteres\n\n**Formatos:** PDF y TXT")
     st.divider()
     st.caption("UTEC - Universidad Tecnológica · 2026")
 
@@ -142,15 +152,30 @@ def extract_text_from_file(uploaded_file) -> str:
     except Exception as e:
         raise Exception(f"Error al leer el archivo: {str(e)}")
 
-def analyze_document_with_gemini(text: str, key: str, model_name: str) -> dict:
-    """Envía el documento a Gemini mediante el SDK oficial google-genai."""
+def get_representative_sample(text: str, max_chars: int) -> str:
+    """Extrae una muestra representativa (inicio, centro y final) si el texto es muy extenso."""
+    if len(text) <= max_chars:
+        return text
+    
+    part = max_chars // 3
+    start_chunk = text[:part]
+    mid_start = len(text) // 2 - (part // 2)
+    mid_chunk = text[mid_start : mid_start + part]
+    end_chunk = text[-part:]
+    
+    return f"{start_chunk}\n\n[... CONTENIDO INTERMEDIO OMITIDO PARA OPTIMIZAR CUOTA ...]\n\n{mid_chunk}\n\n[... CONTENIDO INTERMEDIO OMITIDO ...]\n\n{end_chunk}"
+
+def analyze_document_with_gemini(text: str, key: str, model_name: str, max_chars: int) -> dict:
+    """Envía la muestra del documento a Gemini mediante el SDK oficial google-genai."""
     client = genai.Client(api_key=key.strip())
+    
+    sample_text = get_representative_sample(text, max_chars)
     
     system_instruction = """
 Eres un comité académico experto de alto nivel en validación de originalidad, análisis lingüístico-estilístico y verificación bibliográfica universitaria.
 Tu tarea es analizar exhaustivamente el documento académico proporcionado por un estudiante o docente.
 
-Debes responder strictly en formato JSON válido con la siguiente estructura (sin bloques markdown adicionales fuera del JSON):
+Debes responder estrictamente en formato JSON válido con la siguiente estructura (sin bloques markdown adicionales fuera del JSON):
 {
     "porcentaje_ia": 25,
     "clasificacion_ia": "Bajo" | "Moderado" | "Alto",
@@ -171,40 +196,45 @@ Debes responder strictly en formato JSON válido con la siguiente estructura (si
     prompt = f"""Analiza el siguiente texto académico y proporciona la evaluación de originalidad:
 
 --- INICIO DEL TEXTO ACADÉMICO ---
-{text[:15000]}
+{sample_text}
 --- FIN DEL TEXTO ACADÉMICO ---
 """
 
-    try:
-        response = client.models.generate_content(
-            model=model_name,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                temperature=0.2,
-                response_mime_type="application/json"
+    max_attempts = 2
+    for attempt in range(max_attempts):
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    temperature=0.2,
+                    response_mime_type="application/json"
+                )
             )
-        )
-        raw_text = response.text.strip()
-        if raw_text.startswith("```json"):
-            raw_text = raw_text[7:]
-        if raw_text.startswith("```"):
-            raw_text = raw_text[3:]
-        if raw_text.endswith("```"):
-            raw_text = raw_text[:-3]
-        return json.loads(raw_text.strip())
+            raw_text = response.text.strip()
+            if raw_text.startswith("```json"):
+                raw_text = raw_text[7:]
+            if raw_text.startswith("```"):
+                raw_text = raw_text[3:]
+            if raw_text.endswith("```"):
+                raw_text = raw_text[:-3]
+            return json.loads(raw_text.strip())
 
-    except Exception as e:
-        err_str = str(e)
-        if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
-            raise ValueError("⏳ Has alcanzado el límite de velocidad por minuto (Rate Limit) de la API gratuita de Google Gemini. Por favor espera **30 a 60 segundos** antes de presionar el botón de nuevo.")
-        elif "API_KEY_INVALID" in err_str or ("INVALID_ARGUMENT" in err_str and "key" in err_str.lower()):
-            raise ValueError("La API Key ingresada no es válida. Por favor verifica tu clave en el panel lateral.")
-        elif "404" in err_str or "NOT_FOUND" in err_str:
-            raise ValueError(f"El modelo '{model_name}' no se encuentra disponible. Por favor selecciona 'gemini-1.5-flash' o 'gemini-2.0-flash' en la barra lateral.")
-        else:
-            raise RuntimeError(f"Error al conectar con la API de Gemini: {err_str}")
-
+        except Exception as e:
+            err_str = str(e)
+            if ("429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower()) and attempt < max_attempts - 1:
+                # Esperar 4 segundos antes de un segundo intento interno
+                time.sleep(4)
+                continue
+            elif "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
+                raise ValueError("⏳ La cuota de peticiones por minuto de la API gratuita de Google está saturada. Por favor espera **30 a 60 segundos** sin presionar el botón para que Google reinicie tu límite.")
+            elif "API_KEY_INVALID" in err_str or ("INVALID_ARGUMENT" in err_str and "key" in err_str.lower()):
+                raise ValueError("La API Key ingresada no es válida. Por favor verifica tu clave en el panel lateral.")
+            elif "404" in err_str or "NOT_FOUND" in err_str:
+                raise ValueError(f"El modelo '{model_name}' no se encuentra disponible. Por favor selecciona otro modelo en la barra lateral.")
+            else:
+                raise RuntimeError(f"Error en la llamada a Gemini ({model_name}): {err_str}")
 
 # -----------------------------------------------------------------------------
 # Interfaz de Usuario Principal
@@ -216,7 +246,7 @@ with col_left:
     uploaded_file = st.file_uploader(
         "Arrastra o selecciona un trabajo académico (.pdf o .txt)",
         type=["pdf", "txt"],
-        help="Límite recomendado: hasta 15,000 caracteres de texto."
+        help="Soporta documentos extensos extrayendo muestras representativas."
     )
     
     extracted_text = None
@@ -231,7 +261,7 @@ with col_left:
                 
                 m1, m2 = st.columns(2)
                 m1.metric("Total de Palabras", f"{word_count:,}")
-                m2.metric("Caracteres", f"{char_count:,}")
+                m2.metric("Caracteres Totales", f"{char_count:,}")
                 
             except Exception as e:
                 st.error(f"❌ {str(e)}")
@@ -243,13 +273,13 @@ with col_right:
     elif not uploaded_file or not extracted_text:
         st.info("👈 Sube un documento **PDF o TXT** para habilitar la evaluación.", icon="📑")
     else:
-        st.write(f"El documento está listo para evaluarse con **{selected_model}**.")
+        st.write(f"El documento está listo para evaluarse con **{selected_model}** (muestra de {sample_limit:,} caracteres).")
         btn_analyze = st.button("🚀 Iniciar Análisis de Originalidad e IA", type="primary", use_container_width=True)
         
         if btn_analyze:
             with st.spinner(f"🔍 Analizando sintaxis, coherencia y referencias bibliográficas con {selected_model}..."):
                 try:
-                    analysis_result = analyze_document_with_gemini(extracted_text, api_key, selected_model)
+                    analysis_result = analyze_document_with_gemini(extracted_text, api_key, selected_model, sample_limit)
                     st.session_state["analysis_result"] = analysis_result
                     st.session_state["analyzed_filename"] = uploaded_file.name
                     st.toast("Análisis completado exitosamente", icon="🎉")
