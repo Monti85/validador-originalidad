@@ -1,0 +1,321 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║         VALIDADOR DE ORIGINALIDAD E IA — UTEC                              ║
+║         MANUAL DE INSTALACIÓN Y USO — GUÍA PASO A PASO                    ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+Este manual explica cómo instalar y ejecutar la aplicación desde cero en
+cualquier computadora con Windows 10 u 11, sin conocimientos previos de
+programación.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ÍNDICE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  PARTE 1 — Instalar Python
+  PARTE 2 — Descargar el proyecto desde GitHub
+  PARTE 3 — Instalar las dependencias del proyecto
+  PARTE 4 — Obtener tu API Key de Google AI Studio (gratis)
+  PARTE 5 — Ejecutar la aplicación
+  PARTE 6 — Cómo usar la aplicación
+  PARTE 7 — Solución de problemas frecuentes
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PARTE 1 — INSTALAR PYTHON
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Python es el lenguaje de programación con el que está construida esta
+aplicación. Es gratuito y se instala una sola vez.
+
+PASO 1.1 — Verificar si ya tenés Python instalado
+   a) Presioná las teclas  Windows + R
+   b) Escribí "cmd" y presioná Enter
+   c) En la ventana negra que se abre, escribí:
+      python --version
+   d) Presioná Enter
+
+   ✅ Si aparece algo como "Python 3.11.4" → Python ya está instalado. 
+      Pasá directo a la PARTE 2.
+   ❌ Si aparece un error o se abre la tienda de Microsoft → hay que instalarlo.
+
+PASO 1.2 — Descargar Python
+   a) Abrí tu navegador (Chrome, Edge, Firefox)
+   b) Entrá a:  https://www.python.org/downloads/
+   c) Hacé clic en el botón amarillo grande que dice
+      "Download Python 3.xx.x"  (el número puede variar)
+   d) Esperá que se descargue el instalador
+
+PASO 1.3 — Instalar Python
+   a) Abrí el archivo descargado (python-3.xx.x-amd64.exe)
+   b) ⚠️ IMPORTANTE: Antes de hacer clic en "Install Now",
+      asegurate de marcar la casilla que dice:
+      ☑ "Add Python to PATH"    ← esta opción es OBLIGATORIA
+   c) Hacé clic en "Install Now"
+   d) Esperá que termine la instalación
+   e) Hacé clic en "Close"
+
+PASO 1.4 — Verificar la instalación
+   a) Cerrá la ventana de CMD si la tenías abierta
+   b) Abrí una nueva: Windows + R → "cmd" → Enter
+   c) Escribí:  python --version
+   d) Deberías ver "Python 3.xx.x" ✅
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PARTE 2 — DESCARGAR EL PROYECTO DESDE GITHUB
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Hay dos formas de obtener el proyecto. Elegí la que te resulte más cómoda:
+
+OPCIÓN A — Descargar como ZIP (más sencillo, no requiere Git)
+   a) Abrí tu navegador y entrá a:
+      https://github.com/Monti85/validador-originalidad
+   b) Hacé clic en el botón verde que dice "< > Code"
+   c) Hacé clic en "Download ZIP"
+   d) Guardá el archivo en una ubicación fácil de recordar (por ejemplo,
+      tu escritorio o la carpeta Documentos)
+   e) Hacé clic derecho sobre el ZIP descargado → "Extraer todo..."
+   f) Elegí una carpeta destino (por ej: C:\Validacion) y hacé clic en
+      "Extraer"
+
+OPCIÓN B — Clonar con Git (para usuarios que ya tienen Git instalado)
+   a) Abrí CMD (Windows + R → "cmd" → Enter)
+   b) Navegá a donde querés guardar el proyecto:
+      cd C:\
+   c) Ejecutá:
+      git clone https://github.com/Monti85/validador-originalidad.git
+   d) Esto crea la carpeta "validador-originalidad" con todos los archivos
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PARTE 3 — INSTALAR LAS DEPENDENCIAS DEL PROYECTO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Las dependencias son las librerías adicionales que la aplicación necesita.
+Se instalan con un solo comando.
+
+PASO 3.1 — Abrir CMD en la carpeta del proyecto
+   a) Abrí el Explorador de archivos de Windows
+   b) Navegá hasta la carpeta del proyecto (donde está el archivo app.py)
+   c) Hacé clic en la barra de direcciones (arriba donde dice la ruta)
+   d) Escribí "cmd" y presioná Enter
+      → Esto abre CMD ya posicionado en esa carpeta ✅
+
+   (También podés hacerlo manualmente:
+    - Abrí CMD: Windows + R → "cmd" → Enter
+    - Luego escribí:  cd C:\ruta\a\validador-originalidad
+    - Por ejemplo:    cd C:\Validacion\validador-originalidad)
+
+PASO 3.2 — Instalar las dependencias
+   Con CMD abierto en la carpeta del proyecto, escribí exactamente:
+
+      pip install -r requirements.txt
+
+   Presioná Enter y esperá. Verás texto descargándose.
+   Cuando termine, aparecerá el símbolo de carpeta nuevamente.
+
+   ✅ Si ves "Successfully installed..." → todo salió bien.
+   ❌ Si ves "'pip' is not recognized" → Python no quedó en el PATH.
+      Desinstalá Python y volvé a instalarlo marcando "Add Python to PATH".
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PARTE 4 — OBTENER TU API KEY DE GOOGLE AI STUDIO (GRATIS)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+La API Key es una clave gratuita que permite que la aplicación se conecte
+a la Inteligencia Artificial de Google (Gemini). Se necesita una cuenta
+de Google (Gmail).
+
+PASO 4.1 — Acceder a Google AI Studio
+   a) Abrí tu navegador
+   b) Entrá a:  https://aistudio.google.com/apikey
+   c) Si te pide iniciar sesión, usá tu cuenta de Gmail personal
+      (las cuentas institucionales pueden tener restricciones)
+
+PASO 4.2 — Crear un proyecto nuevo y generar la clave
+   a) Hacé clic en el botón azul "Create API key"
+   b) En el menú que aparece, hacé clic en "Create new project"
+      ⚠️ Es importante crear un proyecto NUEVO para tener cuota fresca
+   c) Ponele un nombre al proyecto (por ej: "ValidadorUTEC")
+   d) Hacé clic en "Create API key in new project"
+   e) Aparecerá una clave que empieza con letras y números
+   f) Hacé clic en el ícono de copiar (📋) para copiar la clave
+   g) ⚠️ Guardá esta clave en un lugar seguro (bloc de notas, etc.)
+      Solo se muestra una vez completa, aunque siempre la podés regenerar.
+
+INFORMACIÓN IMPORTANTE SOBRE LA CUOTA GRATUITA:
+   - El plan gratuito permite hasta 200 análisis por día por modelo
+   - Si se agota la cuota del modelo seleccionado, la app intenta
+     automáticamente con otro modelo
+   - La cuota se reinicia todos los días a medianoche UTC
+     (equivale a las 21:00 hs de Argentina)
+   - Si necesitás más análisis, podés crear un nuevo proyecto en AI Studio
+     o activar facturación (pago por uso, muy económico)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PARTE 5 — EJECUTAR LA APLICACIÓN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PASO 5.1 — Iniciar la aplicación
+   a) Abrí CMD en la carpeta del proyecto (ver Paso 3.1)
+   b) Escribí exactamente:
+
+      streamlit run app.py
+
+   c) Presioná Enter
+   d) Esperá unos segundos. Verás texto como:
+      "You can now view your Streamlit app in your browser."
+      "Local URL: http://localhost:8501"
+
+PASO 5.2 — Abrir en el navegador
+   a) Tu navegador predeterminado debería abrirse automáticamente
+   b) Si no se abre, abrí Chrome o Edge y escribí en la barra de
+      direcciones:  http://localhost:8501
+
+PASO 5.3 — Dejar la app corriendo
+   ⚠️ La ventana de CMD debe permanecer ABIERTA mientras usás la app.
+   Si la cerrás, la aplicación se detiene.
+   Para detener la aplicación, presioná Ctrl + C en la ventana de CMD.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PARTE 6 — CÓMO USAR LA APLICACIÓN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Una vez que la app está abierta en el navegador:
+
+PASO 6.1 — Ingresar la API Key
+   a) En la barra lateral izquierda, buscá el campo "Gemini API Key:"
+   b) Pegá tu clave de API (la que copiaste en la Parte 4)
+   c) Deberías ver un mensaje verde: "✅ API Key ingresada"
+
+PASO 6.2 — Seleccionar el modelo de IA
+   a) En la barra lateral, bajo "Modelo de IA", encontrarás un selector
+   b) Por defecto está seleccionado "gemini-flash-latest" (recomendado)
+   c) Si un modelo tiene la cuota agotada, la app prueba automáticamente
+      con el siguiente. No necesitás cambiarlo manualmente.
+
+PASO 6.3 — Cargar el documento a analizar
+   OPCIÓN A — Subir un archivo:
+   a) En la sección "Carga de Documento", hacé clic en "Browse files"
+      o arrastrá y soltá tu archivo directamente en esa área
+   b) La aplicación acepta archivos PDF y TXT (hasta 200 MB)
+   c) Verás el nombre del archivo y la cantidad de palabras y caracteres
+      extraídos
+
+   OPCIÓN B — Usar el texto de ejemplo (para probar):
+   a) Marcá la casilla "🧪 Usar texto de ejemplo (para prueba rápida)"
+   b) Esto carga un texto académico de demostración sin necesidad de subir
+      un archivo propio
+
+PASO 6.4 — Iniciar el análisis
+   a) Hacé clic en el botón rojo "🚀 Iniciar Análisis de Originalidad e IA"
+   b) Aparecerá un indicador de carga. El análisis puede tardar entre
+      10 y 60 segundos dependiendo del tamaño del documento
+   c) Si el modelo está ocupado, la app espera automáticamente y reintenta
+
+PASO 6.5 — Leer los resultados
+   Los resultados se muestran en cuatro pestañas:
+   
+   📊 Panel principal:
+   - Porcentaje estimado de contenido generado por IA (0-100%)
+   - Clasificación: Bajo / Moderado / Alto
+   - Estado de las citas bibliográficas
+
+   🤖 Detección de IA:
+   - Justificación estilística y análisis sintáctico del texto
+
+   🧠 Coherencia y Originalidad:
+   - Evaluación de la profundidad analítica y fluidez de ideas
+
+   📚 Citas y Referencias:
+   - Revisión del formato bibliográfico (APA, IEEE, Vancouver, etc.)
+   - Detección de posibles citas inventadas o sin respaldo
+
+   💡 Recomendaciones:
+   - Sugerencias constructivas para mejorar el trabajo
+
+   📄 Texto Extraído:
+   - El texto completo que fue analizado
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PARTE 7 — SOLUCIÓN DE PROBLEMAS FRECUENTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PROBLEMA: Al escribir "python --version" aparece un error
+SOLUCIÓN: Python no está instalado o no se agregó al PATH.
+          Desinstalá Python desde el Panel de Control y volvé a instalarlo
+          asegurándote de marcar "Add Python to PATH" durante la instalación.
+
+──────────────────────────────────────────────────────────────────────────────
+
+PROBLEMA: Al escribir "pip install -r requirements.txt" aparece
+          "'pip' is not recognized as an internal or external command"
+SOLUCIÓN: Igual que el problema anterior. Reinstalá Python con
+          "Add Python to PATH" marcado.
+
+──────────────────────────────────────────────────────────────────────────────
+
+PROBLEMA: Al escribir "streamlit run app.py" aparece
+          "'streamlit' is not recognized..."
+SOLUCIÓN: Las dependencias no se instalaron correctamente. Ejecutá:
+          pip install streamlit
+          Luego intentá de nuevo: streamlit run app.py
+
+──────────────────────────────────────────────────────────────────────────────
+
+PROBLEMA: La app muestra "La API Key ingresada no es válida"
+SOLUCIÓN: a) Verificá que copiaste la clave completa (puede ser larga)
+          b) Aseguráte de no tener espacios al principio o al final
+          c) Generá una nueva clave en https://aistudio.google.com/apikey
+
+──────────────────────────────────────────────────────────────────────────────
+
+PROBLEMA: La app muestra "Cuota del proyecto agotada"
+SOLUCIÓN: El plan gratuito tiene un límite diario de 200 análisis por modelo.
+          a) Esperá hasta las 21:00 hs (hora Argentina) para que se reinicie
+          b) O creá un nuevo proyecto en AI Studio con una clave nueva
+             siguiendo los pasos de la Parte 4 (PASO 4.2, usá "Create new
+             project" en vez del proyecto existente)
+
+──────────────────────────────────────────────────────────────────────────────
+
+PROBLEMA: El PDF se subió pero dice "No se pudo extraer texto legible"
+SOLUCIÓN: El PDF puede ser un documento escaneado (imagen). La herramienta
+          trabaja con texto digital. Para convertirlo:
+          a) Abrí el PDF en Adobe Acrobat o Microsoft Word
+          b) Usá la función "Reconocimiento de texto" / OCR
+          c) Exportá el texto a un archivo TXT y subí ese archivo
+
+──────────────────────────────────────────────────────────────────────────────
+
+PROBLEMA: La aplicación se cierra o el navegador muestra "Esta página
+          no está disponible"
+SOLUCIÓN: La ventana de CMD se cerró. La app solo funciona mientras esa
+          ventana esté abierta.
+          a) Abrí CMD nuevamente
+          b) Navegá a la carpeta del proyecto
+          c) Ejecutá: streamlit run app.py
+
+──────────────────────────────────────────────────────────────────────────────
+
+PROBLEMA: El análisis tarda mucho o se congela
+SOLUCIÓN: Documentos muy grandes pueden demorar más. El tiempo normal es
+          entre 10 y 60 segundos. Si pasan más de 2 minutos sin respuesta:
+          a) Recargá la página del navegador
+          b) Volvé a presionar el botón de análisis
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INFORMACIÓN DE CONTACTO Y REPOSITORIO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Repositorio del proyecto:
+   https://github.com/Monti85/validador-originalidad
+
+Documentación de la API de Google Gemini:
+   https://ai.google.dev/gemini-api/docs
+
+Límites y cuotas del plan gratuito:
+   https://ai.google.dev/gemini-api/docs/rate-limits
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+UTEC - Universidad Tecnológica · 2026
+Herramienta de apoyo académico para validación de originalidad e integridad
+de trabajos estudiantiles.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

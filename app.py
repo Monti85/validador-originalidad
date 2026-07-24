@@ -96,14 +96,14 @@ with st.sidebar:
     st.markdown("### 🤖 Modelo de IA")
     selected_model = st.selectbox(
         "Selecciona el modelo Gemini:",
-        ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"],
+        ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-2.5-pro"],
         index=0,
-        help="gemini-2.0-flash es el modelo oficial recomendado por Google."
+        help="gemini-flash-latest es el modelo recomendado y con cuota disponible. Cada modelo tiene su propio límite diario independiente."
     )
     
     st.divider()
     st.markdown("### ℹ️ Especificaciones")
-    st.info(f"**Modelo activo:** `{selected_model}`\n\n**Optimización:** Muestreo inteligente (Hasta 12,000 caracteres)\n\n**Formatos:** PDF y TXT")
+    st.info(f"**Modelo activo:** `{selected_model}`\n\n**Modo:** Documento completo (hasta 120,000 caracteres)\n\n**Formatos:** PDF y TXT")
     st.divider()
     st.caption("UTEC - Universidad Tecnológica · 2026")
 
@@ -143,89 +143,93 @@ def extract_text_from_file(uploaded_file) -> str:
     except Exception as e:
         raise Exception(f"Error al leer el archivo: {str(e)}")
 
-def prepare_academic_sample(text: str, max_chars: int = 12000) -> str:
-    """Extrae una muestra altamente representativa (inicio, desarrollo y conclusiones con citas)."""
+def prepare_full_text(text: str, max_chars: int = 120000) -> tuple[str, bool]:
+    """Devuelve el texto completo del documento. Si excede el límite del modelo, lo trunca con aviso."""
     if len(text) <= max_chars:
-        return text
-    
-    part = max_chars // 3
-    start = text[:part]
-    mid_index = len(text) // 2 - (part // 2)
-    middle = text[mid_index : mid_index + part]
-    end = text[-part:]
-    
-    return f"""--- SECCIÓN 1: INTRODUCCIÓN Y CONTEXTO ---
-{start}
+        return text, False  # texto completo, sin truncar
+    # Solo truncar si supera el límite seguro del modelo
+    truncated = text[:max_chars]
+    return truncated, True  # texto truncado, con aviso
 
---- SECCIÓN 2: DESARROLLO Y METODOLOGÍA ---
-{middle}
-
---- SECCIÓN 3: CONCLUSIONES Y BIBLIOGRAFÍA / CITAS ---
-{end}"""
+def _call_gemini(client, model_name: str, prompt: str, system_instruction: str) -> dict:
+    """Realiza una llamada a Gemini y parsea el JSON de respuesta."""
+    response = client.models.generate_content(
+        model=model_name,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            temperature=0.1,
+            response_mime_type="application/json"
+        )
+    )
+    raw = response.text.strip().strip("```json").strip("```").strip()
+    return json.loads(raw)
 
 def analyze_document_with_gemini(text: str, key: str, model_name: str) -> dict:
-    """Envía la muestra optimizada del documento a Gemini mediante el SDK oficial google-genai."""
+    """Envía el documento completo a Gemini con reintento automático y fallback de modelos."""
     client = genai.Client(api_key=key.strip())
-    
-    # Muestra optimizada a 12,000 caracteres para no exceder los 32,000 tokens/min del plan gratuito
-    sample_text = prepare_academic_sample(text, max_chars=12000)
-    
-    system_instruction = """
-Eres un comité académico experto de alto nivel en validación de originalidad, análisis lingüístico-estilístico y verificación bibliográfica universitaria.
-Tu tarea es analizar exhaustivamente el documento académico proporcionado por un estudiante o docente.
+    full_text, was_truncated = prepare_full_text(text, max_chars=120000)
 
-Debes responder estrictamente en formato JSON válido con la siguiente estructura (sin bloques markdown adicionales fuera del JSON):
-{
-    "porcentaje_ia": 25,
-    "clasificacion_ia": "Bajo" | "Moderado" | "Alto",
-    "justificacion_estilistica": "Explicación detallada sobre vocabulario, sintaxis, repetitividad o patrones robóticos...",
-    "coherencia_originalidad": "Análisis profundo sobre la fluidez de las ideas, profundidad analítica y originalidad del razonamiento...",
-    "revision_citas": {
-        "estado": "Correcto" | "Atención Requerida" | "Citas Sospechosas",
-        "detalles": "Evaluación del formato de citas (APA/IEEE/etc), mención de citas posiblemente inventadas o afirmaciones sin fuente..."
-    },
-    "recomendaciones": [
-        "Recomendación 1 para mejorar la redacción u originalidad.",
-        "Recomendación 2 sobre el manejo bibliográfico.",
-        "Recomendación 3..."
-    ]
-}
-"""
-
-    prompt = f"""Analiza las siguientes secciones representativas del trabajo académico y proporciona la evaluación de originalidad:
-
-{sample_text}
-"""
-
-    try:
-        response = client.models.generate_content(
-            model=model_name,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                temperature=0.2,
-                response_mime_type="application/json"
-            )
+    if was_truncated:
+        st.warning(
+            f"⚠️ El documento tiene {len(text):,} caracteres. Se analizaron los primeros 120,000 "
+            "para no superar el límite del modelo. Los resultados son representativos del documento completo."
         )
-        raw_text = response.text.strip()
-        if raw_text.startswith("```json"):
-            raw_text = raw_text[7:]
-        if raw_text.startswith("```"):
-            raw_text = raw_text[3:]
-        if raw_text.endswith("```"):
-            raw_text = raw_text[:-3]
-        return json.loads(raw_text.strip())
 
-    except Exception as e:
-        err_str = str(e)
-        if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
-            raise ValueError("⏳ La cuota de tokens por minuto (TPM) de la clave de Gemini fue alcanzada. Por favor espera **30 segundos** y vuelve a presionar el botón de análisis.")
-        elif "API_KEY_INVALID" in err_str or ("INVALID_ARGUMENT" in err_str and "key" in err_str.lower()):
-            raise ValueError("La API Key ingresada no es válida. Por favor verifica tu clave en el panel lateral.")
-        elif "404" in err_str or "NOT_FOUND" in err_str:
-            raise ValueError(f"El modelo '{model_name}' no responde o no está disponible. Prueba seleccionando 'gemini-1.5-flash' en la barra lateral.")
-        else:
-            raise RuntimeError(f"Error en la llamada a Gemini ({model_name}): {err_str}")
+    system_instruction = (
+        "Eres un experto académico en detección de IA y validación bibliográfica. "
+        "Analiza el texto y responde SOLO con un JSON válido con estas claves exactas: "
+        "porcentaje_ia (int 0-100), clasificacion_ia (\"Bajo\"|\"Moderado\"|\"Alto\"), "
+        "justificacion_estilistica (str), coherencia_originalidad (str), "
+        "revision_citas ({estado: str, detalles: str}), recomendaciones (list[str])."
+    )
+    prompt = f"Analiza este trabajo académico completo:\n\n{full_text}"
+
+    # Cadena de fallback: cada modelo tiene su propia cuota diaria independiente
+    fallback_chain = [model_name]
+    for m in ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.5-flash"]:
+        if m not in fallback_chain:
+            fallback_chain.append(m)
+
+    last_error = None
+    for attempt_model in fallback_chain:
+        try:
+            return _call_gemini(client, attempt_model, prompt, system_instruction)
+        except Exception as e:
+            err_str = str(e)
+            is_quota = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower()
+            is_not_found = "404" in err_str or "NOT_FOUND" in err_str
+
+            if not is_quota and not is_not_found:
+                # Error definitivo (auth, parsing, etc.) — no tiene sentido reintentar
+                if "API_KEY_INVALID" in err_str or ("INVALID_ARGUMENT" in err_str and "key" in err_str.lower()):
+                    raise ValueError("❌ La API Key ingresada no es válida. Por favor verifica tu clave en la barra lateral.")
+                raise RuntimeError(f"Error en Gemini ({attempt_model}): {err_str}")
+
+            last_error = err_str
+
+            if is_quota:
+                # Esperamos y reintentamos con el MISMO modelo antes de pasar al siguiente
+                wait_seconds = 62
+                placeholder = st.empty()
+                placeholder.warning(f"⏳ Cuota alcanzada en `{attempt_model}`. Esperando {wait_seconds}s antes de reintentar...")
+                for remaining in range(wait_seconds, 0, -1):
+                    placeholder.warning(f"⏳ Cuota alcanzada en `{attempt_model}`. Reintentando en **{remaining}s**...")
+                    time.sleep(1)
+                placeholder.empty()
+                try:
+                    return _call_gemini(client, attempt_model, prompt, system_instruction)
+                except Exception:
+                    pass  # Sigue al siguiente modelo del fallback
+            # Si es NOT_FOUND, pasa directo al siguiente modelo
+
+    raise ValueError(
+        f"⚠️ Todos los modelos disponibles alcanzaron su límite de cuota.\n"
+        "**Opciones:**\n"
+        "1. Espera 1-2 minutos y vuelve a intentarlo.\n"
+        "2. Genera una nueva API Key en [Google AI Studio](https://aistudio.google.com/app/apikey).\n"
+        "3. Si el problema persiste, la clave puede tener restricciones de dominio institucional."
+    )
 
 # -----------------------------------------------------------------------------
 # Interfaz de Usuario Principal
