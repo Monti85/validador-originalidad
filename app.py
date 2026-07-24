@@ -74,9 +74,9 @@ st.markdown("""
         color: #00A4E4 !important;
     }
 
-    /* Ocultar elementos nativos de Streamlit (Deploy, Menú, Footer) */
-    [data-testid="stHeader"] {display: none;}
+    /* Ocultar elementos nativos de Streamlit (Deploy, Menú, Footer) manteniendo el botón de la barra lateral */
     #MainMenu {visibility: hidden;}
+    .stDeployButton {display: none;}
     footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
