@@ -98,12 +98,12 @@ with st.sidebar:
         "Selecciona el modelo Gemini:",
         ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"],
         index=0,
-        help="gemini-2.0-flash es el modelo oficial de última generación recomendado por Google."
+        help="gemini-2.0-flash es el modelo oficial recomendado por Google."
     )
     
     st.divider()
     st.markdown("### ℹ️ Especificaciones")
-    st.info(f"**Modelo activo:** `{selected_model}`\n\n**Análisis:** Documento Completo (Sin límite de caracteres)\n\n**Formatos:** PDF y TXT")
+    st.info(f"**Modelo activo:** `{selected_model}`\n\n**Optimización:** Muestreo inteligente (Hasta 12,000 caracteres)\n\n**Formatos:** PDF y TXT")
     st.divider()
     st.caption("UTEC - Universidad Tecnológica · 2026")
 
@@ -143,9 +143,32 @@ def extract_text_from_file(uploaded_file) -> str:
     except Exception as e:
         raise Exception(f"Error al leer el archivo: {str(e)}")
 
+def prepare_academic_sample(text: str, max_chars: int = 12000) -> str:
+    """Extrae una muestra altamente representativa (inicio, desarrollo y conclusiones con citas)."""
+    if len(text) <= max_chars:
+        return text
+    
+    part = max_chars // 3
+    start = text[:part]
+    mid_index = len(text) // 2 - (part // 2)
+    middle = text[mid_index : mid_index + part]
+    end = text[-part:]
+    
+    return f"""--- SECCIÓN 1: INTRODUCCIÓN Y CONTEXTO ---
+{start}
+
+--- SECCIÓN 2: DESARROLLO Y METODOLOGÍA ---
+{middle}
+
+--- SECCIÓN 3: CONCLUSIONES Y BIBLIOGRAFÍA / CITAS ---
+{end}"""
+
 def analyze_document_with_gemini(text: str, key: str, model_name: str) -> dict:
-    """Envía el documento completo a Gemini mediante el SDK oficial google-genai."""
+    """Envía la muestra optimizada del documento a Gemini mediante el SDK oficial google-genai."""
     client = genai.Client(api_key=key.strip())
+    
+    # Muestra optimizada a 12,000 caracteres para no exceder los 32,000 tokens/min del plan gratuito
+    sample_text = prepare_academic_sample(text, max_chars=12000)
     
     system_instruction = """
 Eres un comité académico experto de alto nivel en validación de originalidad, análisis lingüístico-estilístico y verificación bibliográfica universitaria.
@@ -169,12 +192,9 @@ Debes responder estrictamente en formato JSON válido con la siguiente estructur
 }
 """
 
-    # Enviar el texto completo (soporta hasta 1,000,000 de tokens en Gemini 2.0/1.5)
-    prompt = f"""Analiza el siguiente texto académico completo y proporciona la evaluación de originalidad:
+    prompt = f"""Analiza las siguientes secciones representativas del trabajo académico y proporciona la evaluación de originalidad:
 
---- INICIO DEL TEXTO ACADÉMICO ---
-{text[:100000]}
---- FIN DEL TEXTO ACADÉMICO ---
+{sample_text}
 """
 
     try:
@@ -199,11 +219,11 @@ Debes responder estrictamente en formato JSON válido con la siguiente estructur
     except Exception as e:
         err_str = str(e)
         if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
-            raise ValueError("⏳ Límite temporal de frecuencia alcanzado. Por favor espera 15-30 segundos e intenta de nuevo.")
+            raise ValueError("⏳ La cuota de tokens por minuto (TPM) de la clave de Gemini fue alcanzada. Por favor espera **30 segundos** y vuelve a presionar el botón de análisis.")
         elif "API_KEY_INVALID" in err_str or ("INVALID_ARGUMENT" in err_str and "key" in err_str.lower()):
             raise ValueError("La API Key ingresada no es válida. Por favor verifica tu clave en el panel lateral.")
         elif "404" in err_str or "NOT_FOUND" in err_str:
-            raise ValueError(f"El modelo '{model_name}' no responde o no está disponible en tu región. Prueba seleccionando 'gemini-1.5-flash' en la barra lateral.")
+            raise ValueError(f"El modelo '{model_name}' no responde o no está disponible. Prueba seleccionando 'gemini-1.5-flash' en la barra lateral.")
         else:
             raise RuntimeError(f"Error en la llamada a Gemini ({model_name}): {err_str}")
 
@@ -217,22 +237,31 @@ with col_left:
     uploaded_file = st.file_uploader(
         "Arrastra o selecciona un trabajo académico (.pdf o .txt)",
         type=["pdf", "txt"],
-        help="Soporta análisis del documento completo."
+        help="Extrae el texto del documento para análisis de originalidad."
     )
     
+    # Opción de texto de prueba rápido
+    use_sample_doc = st.checkbox("🧪 Usar texto de ejemplo (para prueba rápida)", value=False)
+    
     extracted_text = None
-    if uploaded_file:
+    if use_sample_doc:
+        extracted_text = """El impacto de la inteligencia artificial en la educación superior ha generado importantes debates éticos e institucionales. Según García (2023), la adopción de modelos generativos de lenguaje en entornos universitarios requiere un marco normativo claro. Sin embargo, estudios recientes (Smith et al., 2024) sugieren que más del 65% de los estudiantes utiliza herramientas de IA para sintetizar información académica.
+
+En la Universidad Tecnológica (UTEC), la implementación de tecnologías emergentes busca potenciar el pensamiento crítico sin reemplazar la autoría genuina. Es fundamental distinguir entre la asistencia tecnológica responsable y la delegación completa del razonamiento analítico. La bibliografía consultada demuestra que los patrones sintácticos reiterativos y la falta de variabilidad estilística son marcas distintivas de los borradores sintéticos."""
+        st.info("📄 Documento de ejemplo cargado (3 párrafos académicos con citas APA).")
+        
+    elif uploaded_file:
         with st.spinner("Extrayendo texto del documento..."):
             try:
                 extracted_text = extract_text_from_file(uploaded_file)
-                st.success(f"Archivo `{uploaded_file.name}` procesado.", icon="✅")
+                st.success(f"Archivo `{uploaded_file.name}` procesado correctamente.", icon="✅")
                 
                 word_count = len(extracted_text.split())
                 char_count = len(extracted_text)
                 
                 m1, m2 = st.columns(2)
                 m1.metric("Total de Palabras", f"{word_count:,}")
-                m2.metric("Caracteres Totales", f"{char_count:,}")
+                m2.metric("Caracteres Extraídos", f"{char_count:,}")
                 
             except Exception as e:
                 st.error(f"❌ {str(e)}")
@@ -240,19 +269,19 @@ with col_left:
 with col_right:
     st.subheader("📊 Ejecución del Análisis")
     if not api_key:
-        st.info("👈 Por favor ingresa tu **Gemini API Key** institucional en la barra lateral para continuar.", icon="💡")
-    elif not uploaded_file or not extracted_text:
-        st.info("👈 Sube un documento **PDF o TXT** para habilitar la evaluación.", icon="📑")
+        st.info("👈 Por favor ingresa tu **Gemini API Key** en la barra lateral para continuar.", icon="💡")
+    elif not extracted_text:
+        st.info("👈 Sube un documento **PDF o TXT** o marca la casilla de prueba rápida.", icon="📑")
     else:
-        st.write(f"El documento completo está listo para evaluarse con **{selected_model}**.")
+        st.write(f"El texto está listo para evaluarse con el modelo **{selected_model}**.")
         btn_analyze = st.button("🚀 Iniciar Análisis de Originalidad e IA", type="primary", use_container_width=True)
         
         if btn_analyze:
-            with st.spinner(f"🔍 Analizando el documento completo ({len(extracted_text):,} caracteres) con {selected_model}..."):
+            with st.spinner(f"🔍 Analizando patrones de IA, coherencia y citas bibliográficas con {selected_model}..."):
                 try:
                     analysis_result = analyze_document_with_gemini(extracted_text, api_key, selected_model)
                     st.session_state["analysis_result"] = analysis_result
-                    st.session_state["analyzed_filename"] = uploaded_file.name
+                    st.session_state["analyzed_filename"] = uploaded_file.name if uploaded_file else "Ejemplo_Academico.txt"
                     st.toast("Análisis completado exitosamente", icon="🎉")
                 except Exception as e:
                     st.error(f"❌ {str(e)}")
