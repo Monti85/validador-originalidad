@@ -7,6 +7,7 @@ import os
 import docx  # Añadido para soporte de Word
 from google import genai
 from google.genai import types
+from streamlit_cookies_controller import CookieController
 
 # -----------------------------------------------------------------------------
 # Configuración de Página e Identidad Visual Académica (UTEC)
@@ -113,15 +114,28 @@ st.markdown(f"""
 # -----------------------------------------------------------------------------
 # Panel Lateral (Sidebar)
 # -----------------------------------------------------------------------------
+# Inicializar controlador de cookies
+controller = CookieController()
+
 with st.sidebar:
     st.header("⚙️ Configuración")
     
+    # Intentar recuperar la clave guardada en el navegador
+    saved_key = controller.get("gemini_api_key")
+    if saved_key is None:
+        saved_key = ""
+        
     api_key = st.text_input(
         "Gemini API Key:",
         type="password",
+        value=saved_key,
         help="Ingresa tu clave de API de Google Gemini (generada en AI Studio).",
         placeholder="AIzaSy..."
     )
+    
+    # Si ingresaron una clave nueva, guardarla por 30 días en las cookies
+    if api_key and api_key != saved_key:
+        controller.set("gemini_api_key", api_key, max_age=60*60*24*30)
     
     if api_key:
         st.success("🔑 API Key ingresada", icon="✅")
