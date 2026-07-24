@@ -1,57 +1,343 @@
 import streamlit as st
-import google.generativeai as genai
-import pypdf # Librería para leer archivos PDF
+import pypdf
+import json
 
-# Configuración de la interfaz
-st.set_page_config(page_title="Validador de Originalidad - UTEC", page_icon="📝")
-st.title("📝 Validador de Originalidad e IA")
-st.write("Sube un documento para analizar si contiene patrones de Inteligencia Artificial o falta de originalidad.")
+# Soporte flexible para librerías de Google Gemini (google-genai y google-generativeai)
+try:
+    from google import genai
+    from google.genai import types
+    USE_NEW_GENAI = True
+except ImportError:
+    try:
+        import google.generativeai as genai
+        USE_NEW_GENAI = False
+    except ImportError:
+        st.error("No se encontró la librería de Google Gemini. Por favor ejecuta: `pip install google-genai google-generativeai`")
+        st.stop()
 
-# Configurar API Key de Google
-api_key = st.sidebar.text_input("Ingresa tu Gemini API Key:", type="password")
+# -----------------------------------------------------------------------------
+# Configuración de Página e Identidad Visual Académica (UTEC)
+# -----------------------------------------------------------------------------
+st.set_page_config(
+    page_title="Validador de Originalidad e IA - UTEC",
+    page_icon="🎓",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-uploaded_file = st.file_uploader("Carga tu archivo (PDF o TXT)", type=["pdf", "txt"])
+# Estilos CSS personalizados para la interfaz académica UTEC
+st.markdown("""
+<style>
+    .main-header {
+        background: linear-gradient(135deg, #002F6C 0%, #005691 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    
+    .main-header h1 {
+        color: white !important;
+        margin-bottom: 0.5rem;
+        font-weight: 700;
+    }
+    
+    .main-header p {
+        color: #E2E8F0;
+        font-size: 1.1rem;
+        margin: 0;
+    }
+    
+    .badge-utec {
+        background-color: rgba(255, 255, 255, 0.2);
+        color: white;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        display: inline-block;
+        margin-bottom: 10px;
+    }
 
-def extract_text(file):
-    if file.type == "application/pdf":
-        reader = pypdf.PdfReader(file)
-        text = "".join([page.extract_text() for page in reader.pages])
-        return text
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        padding: 10px 20px;
+        border-radius: 6px;
+        font-weight: 600;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# -----------------------------------------------------------------------------
+# Encabezado Principal
+# -----------------------------------------------------------------------------
+st.markdown("""
+<div class="main-header">
+    <span class="badge-utec">UTEC · Herramienta Académica</span>
+    <h1>🎓 Validador de Originalidad e Inteligencia Artificial</h1>
+    <p>Evaluación integral de documentos académicos: detección de patrones de IA, coherencia de pensamiento y verificación de citas bibliográficas.</p>
+</div>
+""", unsafe_allow_html=True)
+
+# -----------------------------------------------------------------------------
+# Panel Lateral (Sidebar)
+# -----------------------------------------------------------------------------
+with st.sidebar:
+    st.header("⚙️ Configuración")
+    
+    api_key = st.text_input(
+        "Gemini API Key:",
+        type="password",
+        help="Ingresa tu clave de API de Google Gemini.",
+        placeholder="AIzaSy..."
+    )
+    
+    if api_key:
+        st.success("🔑 API Key ingresada correctamente", icon="✅")
     else:
-        return file.read().decode("utf-8")
+        st.warning("⚠️ Ingresa tu API Key para comenzar", icon="🔑")
+        st.markdown("[¿Cómo obtener tu API Key de Gemini gratis?](https://aistudio.google.com/app/apikey)")
+        
+    st.divider()
+    st.markdown("### ℹ️ Especificaciones")
+    st.info("**Modelo:** `gemini-2.5-flash`\n\n**Formatos:** PDF y TXT")
+    st.divider()
+    st.caption("UTEC - Universidad Tecnológica · 2026")
 
-if uploaded_file and api_key:
-    # Extraer texto del archivo
-    text_content = extract_text(uploaded_file)
-    
-    st.subheader("Texto extraído (vista previa):")
-    st.text_area("Contenido", text_content[:500] + "...", height=100)
-    
-    if st.button("Analizar Documento"):
-        with st.spinner("Analizando el documento con IA..."):
+# -----------------------------------------------------------------------------
+# Lógica de Extracción e Integración con Gemini
+# -----------------------------------------------------------------------------
+def extract_text_from_file(uploaded_file) -> str:
+    """Extrae texto plano de archivos PDF y TXT con manejo de excepciones."""
+    try:
+        if uploaded_file.name.lower().endswith(".pdf"):
+            reader = pypdf.PdfReader(uploaded_file)
+            if reader.is_encrypted:
+                try:
+                    reader.decrypt("")
+                except Exception:
+                    raise ValueError("El archivo PDF está protegido con contraseña.")
+            
+            text_pages = []
+            for page in reader.pages:
+                extracted = page.extract_text()
+                if extracted:
+                    text_pages.append(extracted)
+            
+            full_text = "\n\n".join(text_pages).strip()
+            if not full_text:
+                raise ValueError("No se pudo extraer texto legible del PDF. Es posible que sea un documento escaneado (imágenes).")
+            return full_text
+            
+        elif uploaded_file.name.lower().endswith(".txt"):
+            content = uploaded_file.read()
             try:
-                genai.configure(api_key=api_key)
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                
-                prompt = f"""
-                Actúa como un evaluador académico experto. Analiza el siguiente texto académico y determina:
-                1. **Probabilidad de generación por IA (0-100%)**: Identifica patrones sintéticos, repetición de estructuras o vocabulario típico de LLMs.
-                2. **Coherencia y Originalidad**: Revisa la profundidad de las ideas expresadas.
-                3. **Verificación de Citas y Referencias**: Analiza si las citas incluidas parecen reales y bien formateadas.
-                4. **Recomendaciones**: Sugerencias para que el estudiante mejore la redacción.
+                return content.decode("utf-8").strip()
+            except UnicodeDecodeError:
+                return content.decode("latin-1").strip()
+        else:
+            raise ValueError("Formato no soportado. Por favor sube un archivo .pdf o .txt")
+    except Exception as e:
+        raise Exception(f"Error al leer el archivo: {str(e)}")
 
-                Texto a analizar:
-                ---
-                {text_content}
-                ---
-                Devuelve el análisis en un formato claro, organizado y fácil de leer.
-                """
+def analyze_document_with_gemini(text: str, key: str) -> dict:
+    """Envía el documento a Gemini 2.5 Flash y procesa la respuesta en formato JSON estructurado."""
+    try:
+        system_instruction = """
+Eres un comité académico experto de alto nivel en validación de originalidad, análisis lingüístico-estilístico y verificación bibliográfica universitaria.
+Tu tarea es analizar exhaustivamente el documento académico proporcionado por un estudiante o docente.
+
+Debes responder estrictamente en formato JSON válido con la siguiente estructura (sin bloques markdown adicionales fuera del JSON):
+{
+    "porcentaje_ia": 25,
+    "clasificacion_ia": "Bajo" | "Moderado" | "Alto",
+    "justificacion_estilistica": "Explicación detallada sobre vocabulario, sintaxis, repetitividad o patrones robóticos...",
+    "coherencia_originalidad": "Análisis profundo sobre la fluidez de las ideas, profundidad analítica y originalidad del razonamiento...",
+    "revision_citas": {
+        "estado": "Correcto" | "Atención Requerida" | "Citas Sospechosas",
+        "detalles": "Evaluación del formato de citas (APA/IEEE/etc), mención de citas posiblemente inventadas o afirmaciones sin fuente..."
+    },
+    "recomendaciones": [
+        "Recomendación 1 para mejorar la redacción u originalidad.",
+        "Recomendación 2 sobre el manejo bibliográfico.",
+        "Recomendación 3..."
+    ]
+}
+"""
+
+        prompt = f"""Analiza el siguiente texto académico y proporciona la evaluación de originalidad:
+
+--- INICIO DEL TEXTO ACADÉMICO ---
+{text[:15000]}
+--- FIN DEL TEXTO ACADÉMICO ---
+"""
+
+        if USE_NEW_GENAI:
+            client = genai.Client(api_key=key)
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    temperature=0.2,
+                    response_mime_type="application/json"
+                )
+            )
+            raw_text = response.text
+        else:
+            genai.configure(api_key=key)
+            model = genai.GenerativeModel(
+                model_name='gemini-1.5-flash',
+                system_instruction=system_instruction
+            )
+            response = model.generate_content(prompt)
+            raw_text = response.text
+        
+        # Limpieza básica por si incluye marcas de código markdown ```json ... ```
+        clean_text = raw_text.strip()
+        if clean_text.startswith("```json"):
+            clean_text = clean_text[7:]
+        if clean_text.startswith("```"):
+            clean_text = clean_text[3:]
+        if clean_text.endswith("```"):
+            clean_text = clean_text[:-3]
+            
+        result_json = json.loads(clean_text.strip())
+        return result_json
+
+    except Exception as e:
+        err_msg = str(e)
+        if "API_KEY_INVALID" in err_msg or "400" in err_msg or "403" in err_msg:
+            raise ValueError("La API Key ingresada no es válida. Por favor verifica tu clave en el panel lateral.")
+        elif "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+            raise ValueError("Se excedió la cuota de la API de Gemini. Espera unos momentos antes de reintentar.")
+        else:
+            raise RuntimeError(f"Error durante el análisis con Gemini: {err_msg}")
+
+# -----------------------------------------------------------------------------
+# Interfaz de Usuario Principal
+# -----------------------------------------------------------------------------
+col_left, col_right = st.columns([1, 1], gap="large")
+
+with col_left:
+    st.subheader("📁 Carga de Documento")
+    uploaded_file = st.file_uploader(
+        "Arrastra o selecciona un trabajo académico (.pdf o .txt)",
+        type=["pdf", "txt"],
+        help="Límite recomendado: hasta 15,000 caracteres de texto."
+    )
+    
+    extracted_text = None
+    if uploaded_file:
+        with st.spinner("Extrayendo texto del documento..."):
+            try:
+                extracted_text = extract_text_from_file(uploaded_file)
+                st.success(f"Archivo `{uploaded_file.name}` procesado.", icon="✅")
                 
-                response = model.generate_content(prompt)
+                word_count = len(extracted_text.split())
+                char_count = len(extracted_text)
                 
-                st.success("¡Análisis completado!")
-                st.markdown("---")
-                st.markdown(response.text)
+                m1, m2 = st.columns(2)
+                m1.metric("Total de Palabras", f"{word_count:,}")
+                m2.metric("Caracteres", f"{char_count:,}")
                 
             except Exception as e:
-                st.error(f"Error al procesar el análisis: {e}")
+                st.error(f"❌ {str(e)}")
+
+with col_right:
+    st.subheader("📊 Ejecución del Análisis")
+    if not api_key:
+        st.info("👈 Por favor ingresa tu **Gemini API Key** en la barra lateral para continuar.", icon="💡")
+    elif not uploaded_file or not extracted_text:
+        st.info("👈 Sube un documento **PDF o TXT** para habilitar la evaluación.", icon="📑")
+    else:
+        st.write("El documento está listo para evaluarse con **Gemini 2.5 Flash**.")
+        btn_analyze = st.button("🚀 Iniciar Análisis de Originalidad e IA", type="primary", use_container_width=True)
+        
+        if btn_analyze:
+            with st.spinner("🔍 Analizando sintaxis, coherencia y referencias bibliográficas con IA..."):
+                try:
+                    analysis_result = analyze_document_with_gemini(extracted_text, api_key)
+                    st.session_state["analysis_result"] = analysis_result
+                    st.session_state["analyzed_filename"] = uploaded_file.name
+                    st.toast("Análisis completado exitosamente", icon="🎉")
+                except Exception as e:
+                    st.error(f"❌ {str(e)}")
+
+# -----------------------------------------------------------------------------
+# Despliegue de Resultados Organizaciones en Tarjetas y Tabs
+# -----------------------------------------------------------------------------
+if "analysis_result" in st.session_state:
+    st.divider()
+    res = st.session_state["analysis_result"]
+    filename = st.session_state.get("analyzed_filename", "documento")
+    
+    st.markdown(f"## 📈 Reporte de Evaluación: `{filename}`")
+    
+    porcentaje_ia = res.get("porcentaje_ia", 0)
+    clasificacion = res.get("clasificacion_ia", "N/A")
+    citas_estado = res.get("revision_citas", {}).get("estado", "N/A")
+    
+    # Tarjetas Métricas
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric(label="🤖 Estimación de Contenido IA", value=f"{porcentaje_ia}%")
+        st.progress(porcentaje_ia / 100.0)
+        
+    with col2:
+        if porcentaje_ia < 30:
+            st.success(f"Probabilidad de IA: **{clasificacion}** (Autoría predominantemente humana)")
+        elif porcentaje_ia < 70:
+            st.warning(f"Probabilidad de IA: **{clasificacion}** (Sugerida revisión docente)")
+        else:
+            st.error(f"Probabilidad de IA: **{clasificacion}** (Alto patrón de IA detectado)")
+            
+    with col3:
+        if citas_estado == "Correcto":
+            st.success(f"Citas Bibliográficas: **{citas_estado}**", icon="📚")
+        elif citas_estado == "Atención Requerida":
+            st.warning(f"Citas Bibliográficas: **{citas_estado}**", icon="⚠️")
+        else:
+            st.error(f"Citas Bibliográficas: **{citas_estado}**", icon="🚨")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Pestañas de Resultados
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "🤖 Detección de IA",
+        "🧠 Coherencia y Originalidad",
+        "📚 Citas y Referencias",
+        "💡 Recomendaciones",
+        "📄 Texto Extraído"
+    ])
+    
+    with tab1:
+        st.markdown("### 🔍 Justificación Estilística y Sintáctica")
+        st.info(res.get("justificacion_estilistica", "Sin información."))
+        
+    with tab2:
+        st.markdown("### 🧠 Análisis de Coherencia y Profundidad del Pensamiento")
+        st.write(res.get("coherencia_originalidad", "Sin información."))
+        
+    with tab3:
+        st.markdown("### 📚 Revisión de Fuentes y Rigor Académico")
+        st.write(res.get("revision_citas", {}).get("detalles", "Sin información."))
+        
+    with tab4:
+        st.markdown("### 💡 Recomendaciones Constructivas")
+        recs = res.get("recomendaciones", [])
+        if isinstance(recs, list) and recs:
+            for idx, r in enumerate(recs, 1):
+                st.markdown(f"**{idx}.** {r}")
+        else:
+            st.write(recs)
+            
+    with tab5:
+        st.markdown("### 📄 Contenido Extraído del Documento")
+        if extracted_text:
+            st.text_area("Texto analizado", extracted_text, height=350)
