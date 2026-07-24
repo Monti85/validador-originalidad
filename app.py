@@ -2,6 +2,9 @@ import streamlit as st
 import pypdf
 import json
 import time
+import base64
+import os
+import docx  # Añadido para soporte de Word
 from google import genai
 from google.genai import types
 
@@ -15,32 +18,51 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS personalizados para la interfaz académica UTEC
+# Estilos CSS personalizados para la identidad visual de UTEC
 st.markdown("""
 <style>
+    /* Fondo principal blanco */
+    .stApp {
+        background-color: #F8F9FA;
+    }
+    
     .main-header {
-        background: linear-gradient(135deg, #002F6C 0%, #005691 100%);
-        color: white;
+        background-color: #FFFFFF;
+        color: #00274C; /* Azul oscuro UTEC */
         padding: 2rem;
         border-radius: 12px;
         margin-bottom: 2rem;
+        border-top: 5px solid #00A4E4; /* Celeste/Cyan UTEC */
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        display: flex;
+        align-items: center;
+        gap: 20px;
     }
     
-    .main-header h1 {
-        color: white !important;
+    .main-header img {
+        max-width: 120px;
+        height: auto;
+    }
+    
+    .header-text {
+        flex: 1;
+    }
+    
+    .header-text h1 {
+        color: #00274C !important;
         margin-bottom: 0.5rem;
-        font-weight: 700;
+        font-weight: 800;
+        font-size: 2.2rem;
     }
     
-    .main-header p {
-        color: #E2E8F0;
+    .header-text p {
+        color: #4A5568;
         font-size: 1.1rem;
         margin: 0;
     }
     
     .badge-utec {
-        background-color: rgba(255, 255, 255, 0.2);
+        background-color: #00A4E4;
         color: white;
         padding: 4px 12px;
         border-radius: 20px;
@@ -50,26 +72,40 @@ st.markdown("""
         margin-bottom: 10px;
     }
 
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-    }
-
-    .stTabs [data-baseweb="tab"] {
-        padding: 10px 20px;
-        border-radius: 6px;
-        font-weight: 600;
+    /* Estilos para las tarjetas de resultado */
+    div[data-testid="stMetricValue"] {
+        color: #00A4E4 !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# Encabezado Principal
+# Encabezado Principal con Logo Local
 # -----------------------------------------------------------------------------
-st.markdown("""
+# Función para cargar imagen local como base64
+def get_base64_image(image_path):
+    if os.path.exists(image_path):
+        with open(image_path, "rb") as img_file:
+            return base64.b64encode(img_file.read()).decode()
+    return None
+
+# Busca el logo en la carpeta
+logo_base64 = get_base64_image("logo.png") or get_base64_image("logo.jpg")
+
+if logo_base64:
+    img_tag = f'<img src="data:image/png;base64,{logo_base64}" alt="Logo UTEC">'
+else:
+    # Fallback si no encuentra el logo local
+    img_tag = '<span style="font-size: 3rem;">🎓</span>'
+
+st.markdown(f"""
 <div class="main-header">
-    <span class="badge-utec">UTEC · Herramienta Académica</span>
-    <h1>🎓 Validador de Originalidad e Inteligencia Artificial</h1>
-    <p>Evaluación integral de documentos académicos: detección de patrones de IA, coherencia de pensamiento y verificación de citas bibliográficas.</p>
+    {img_tag}
+    <div class="header-text">
+        <span class="badge-utec">Herramienta Académica</span>
+        <h1>Validador de Originalidad e IA</h1>
+        <p>Evaluación integral de documentos académicos: detección de patrones de IA, coherencia de pensamiento y verificación de citas bibliográficas.</p>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -103,7 +139,7 @@ with st.sidebar:
     
     st.divider()
     st.markdown("### ℹ️ Especificaciones")
-    st.info(f"**Modelo activo:** `{selected_model}`\n\n**Modo:** Documento completo (hasta 120,000 caracteres)\n\n**Formatos:** PDF y TXT")
+    st.info(f"**Modelo activo:** `{selected_model}`\n\n**Modo:** Documento completo (hasta 120,000 caracteres)\n\n**Formatos:** PDF, TXT y DOCX")
     st.divider()
     st.caption("UTEC - Universidad Tecnológica · 2026")
 
@@ -111,9 +147,12 @@ with st.sidebar:
 # Lógica de Extracción e Integración con Gemini
 # -----------------------------------------------------------------------------
 def extract_text_from_file(uploaded_file) -> str:
-    """Extrae texto plano de archivos PDF y TXT con manejo de excepciones."""
+    """Extrae texto plano de archivos PDF, TXT y DOCX con manejo de excepciones."""
     try:
-        if uploaded_file.name.lower().endswith(".pdf"):
+        filename = uploaded_file.name.lower()
+        
+        # Procesamiento de PDF
+        if filename.endswith(".pdf"):
             reader = pypdf.PdfReader(uploaded_file)
             if reader.is_encrypted:
                 try:
@@ -132,14 +171,23 @@ def extract_text_from_file(uploaded_file) -> str:
                 raise ValueError("No se pudo extraer texto legible del PDF. Es posible que sea un documento escaneado (imágenes).")
             return full_text
             
-        elif uploaded_file.name.lower().endswith(".txt"):
+        # Procesamiento de Word (DOCX)
+        elif filename.endswith(".docx"):
+            doc = docx.Document(uploaded_file)
+            full_text = "\n".join([para.text for para in doc.paragraphs if para.text.strip()])
+            if not full_text:
+                raise ValueError("El documento de Word parece estar vacío o solo contiene imágenes.")
+            return full_text
+            
+        # Procesamiento de TXT
+        elif filename.endswith(".txt"):
             content = uploaded_file.read()
             try:
                 return content.decode("utf-8").strip()
             except UnicodeDecodeError:
                 return content.decode("latin-1").strip()
         else:
-            raise ValueError("Formato no soportado. Por favor sube un archivo .pdf o .txt")
+            raise ValueError("Formato no soportado. Por favor sube un archivo .pdf, .docx o .txt")
     except Exception as e:
         raise Exception(f"Error al leer el archivo: {str(e)}")
 
@@ -239,8 +287,8 @@ col_left, col_right = st.columns([1, 1], gap="large")
 with col_left:
     st.subheader("📁 Carga de Documento")
     uploaded_file = st.file_uploader(
-        "Arrastra o selecciona un trabajo académico (.pdf o .txt)",
-        type=["pdf", "txt"],
+        "Arrastra o selecciona un trabajo académico (.pdf, .docx, .txt)",
+        type=["pdf", "docx", "txt"],
         help="Extrae el texto del documento para análisis de originalidad."
     )
     
@@ -275,7 +323,7 @@ with col_right:
     if not api_key:
         st.info("👈 Por favor ingresa tu **Gemini API Key** en la barra lateral para continuar.", icon="💡")
     elif not extracted_text:
-        st.info("👈 Sube un documento **PDF o TXT** o marca la casilla de prueba rápida.", icon="📑")
+        st.info("👈 Sube un documento **PDF, DOCX o TXT** o marca la casilla de prueba rápida.", icon="📑")
     else:
         st.write(f"El texto está listo para evaluarse con el modelo **{selected_model}**.")
         btn_analyze = st.button("🚀 Iniciar Análisis de Originalidad e IA", type="primary", use_container_width=True)
