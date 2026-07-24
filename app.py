@@ -1,19 +1,8 @@
 import streamlit as st
 import pypdf
 import json
-
-# Soporte flexible para librerías de Google Gemini (google-genai y google-generativeai)
-try:
-    from google import genai
-    from google.genai import types
-    USE_NEW_GENAI = True
-except ImportError:
-    try:
-        import google.generativeai as genai
-        USE_NEW_GENAI = False
-    except ImportError:
-        st.error("No se encontró la librería de Google Gemini. Por favor ejecuta: `pip install google-genai google-generativeai`")
-        st.stop()
+from google import genai
+from google.genai import types
 
 # -----------------------------------------------------------------------------
 # Configuración de Página e Identidad Visual Académica (UTEC)
@@ -106,14 +95,14 @@ with st.sidebar:
     st.markdown("### 🤖 Modelo de IA")
     selected_model = st.selectbox(
         "Selecciona el modelo Gemini:",
-        ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"],
+        ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"],
         index=0,
-        help="gemini-1.5-flash es el modelo más rápido y estable disponible para cuentas estándar."
+        help="gemini-2.5-flash es el modelo oficial estándar recomendado por Google."
     )
     
     st.divider()
     st.markdown("### ℹ️ Especificaciones")
-    st.info(f"**Modelo activo:** `{selected_model}`\n\n**Formatos:** PDF y TXT")
+    st.info(f"**Modelo activo:** `{selected_model}`\n\n**SDK:** `google-genai` (Oficial)\n\n**Formatos:** PDF y TXT")
     st.divider()
     st.caption("UTEC - Universidad Tecnológica · 2026")
 
@@ -154,12 +143,14 @@ def extract_text_from_file(uploaded_file) -> str:
         raise Exception(f"Error al leer el archivo: {str(e)}")
 
 def analyze_document_with_gemini(text: str, key: str, model_name: str) -> dict:
-    """Envía el documento a Gemini y procesa la respuesta en formato JSON estructurado."""
+    """Envía el documento a Gemini mediante el SDK oficial google-genai."""
+    client = genai.Client(api_key=key.strip())
+    
     system_instruction = """
 Eres un comité académico experto de alto nivel en validación de originalidad, análisis lingüístico-estilístico y verificación bibliográfica universitaria.
 Tu tarea es analizar exhaustivamente el documento académico proporcionado por un estudiante o docente.
 
-Debes responder strictly en formato JSON válido con la siguiente estructura (sin bloques markdown adicionales fuera del JSON):
+Debes responder estrictamente en formato JSON válido con la siguiente estructura (sin bloques markdown adicionales fuera del JSON):
 {
     "porcentaje_ia": 25,
     "clasificacion_ia": "Bajo" | "Moderado" | "Alto",
@@ -184,63 +175,38 @@ Debes responder strictly en formato JSON válido con la siguiente estructura (si
 --- FIN DEL TEXTO ACADÉMICO ---
 """
 
-    # Modelos a intentar en caso de que uno devuelva 404 (fallback automático)
-    models_to_try = [model_name, "gemini-1.5-flash", "gemini-1.5-pro"]
-    # Eliminar duplicados manteniendo orden
+    models_to_try = [model_name, "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
     models_to_try = list(dict.fromkeys(models_to_try))
     
-    last_exception = None
-
-    for m_name in models_to_try:
+    last_error = None
+    for m in models_to_try:
         try:
-            if USE_NEW_GENAI:
-                client = genai.Client(api_key=key)
-                response = client.models.generate_content(
-                    model=m_name,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        system_instruction=system_instruction,
-                        temperature=0.2,
-                        response_mime_type="application/json"
-                    )
+            response = client.models.generate_content(
+                model=m,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    temperature=0.2,
+                    response_mime_type="application/json"
                 )
-                raw_text = response.text
-            else:
-                genai.configure(api_key=key)
-                model = genai.GenerativeModel(
-                    model_name=m_name,
-                    system_instruction=system_instruction
-                )
-                response = model.generate_content(prompt)
-                raw_text = response.text
-            
-            # Limpieza básica por si incluye marcas de código markdown ```json ... ```
-            clean_text = raw_text.strip()
-            if clean_text.startswith("```json"):
-                clean_text = clean_text[7:]
-            if clean_text.startswith("```"):
-                clean_text = clean_text[3:]
-            if clean_text.endswith("```"):
-                clean_text = clean_text[:-3]
-                
-            result_json = json.loads(clean_text.strip())
-            return result_json
-
+            )
+            raw_text = response.text.strip()
+            if raw_text.startswith("```json"):
+                raw_text = raw_text[7:]
+            if raw_text.startswith("```"):
+                raw_text = raw_text[3:]
+            if raw_text.endswith("```"):
+                raw_text = raw_text[:-3]
+            return json.loads(raw_text.strip())
         except Exception as e:
-            err_msg = str(e)
-            last_exception = e
-            # Si el modelo no fue encontrado (404), intentamos con el siguiente modelo en la lista
-            if "404" in err_msg or "NOT_FOUND" in err_msg:
-                continue
-            elif "API_KEY_INVALID" in err_msg or "400" in err_msg or "403" in err_msg:
+            last_error = e
+            err_str = str(e)
+            if "API_KEY_INVALID" in err_str or "INVALID_ARGUMENT" in err_str and "key" in err_str.lower():
                 raise ValueError("La API Key ingresada no es válida. Por favor verifica tu clave en el panel lateral.")
-            elif "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+            elif "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
                 raise ValueError("Se excedió la cuota de la API de Gemini. Espera unos momentos antes de reintentar.")
-            else:
-                raise RuntimeError(f"Error durante el análisis con Gemini ({m_name}): {err_msg}")
 
-    # Si todos fallaron
-    raise RuntimeError(f"No se pudo completar la llamada a la API con los modelos disponibles: {str(last_exception)}")
+    raise RuntimeError(f"Error al conectar con la API de Gemini: {str(last_error)}")
 
 # -----------------------------------------------------------------------------
 # Interfaz de Usuario Principal
